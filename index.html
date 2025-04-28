@@ -1,0 +1,1896 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zen Timer - Meditation App (v1.6)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js/dist/fuse.basic.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Custom Styles */
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f7fafc; /* Light gray background */
+        color: #2d3748; /* Dark gray text */
+      }
+      .sortable-ghost {
+        opacity: 0.4;
+        background-color: #c3dafe;
+      }
+      .sortable-chosen {
+        background-color: #ebf4ff;
+      }
+      .progress-ring__circle {
+        transition: stroke-dashoffset 0.25s linear; /* Smoother transition */
+        transform: rotate(-90deg);
+        transform-origin: 50% 50%;
+        stroke: #63b3ed; /* Blue */
+      }
+      .progress-ring__background {
+        stroke: #e2e8f0;
+      }
+      .progress-ring__markers line {
+        stroke: #a0aec0;
+        stroke-width: 1;
+      }
+      /* Style for the start/end marker */
+      .progress-ring__markers line.start-marker {
+        stroke: #4a5568;
+        stroke-width: 2;
+      } /* Darker, thicker start marker */
+
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.4);
+      }
+      .modal-content {
+        background-color: #fefefe;
+        margin: 10% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 90%;
+        max-width: 500px;
+        border-radius: 0.5rem;
+      }
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      button svg,
+      button span,
+      input,
+      select {
+        vertical-align: middle;
+      }
+      *:focus-visible {
+        outline: 2px solid #4299e1;
+        outline-offset: 2px;
+      }
+      input[type="number"]::-webkit-inner-spin-button,
+      input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        -moz-appearance: textfield;
+      }
+
+      /* Style for active preview button */
+      .preview-sound-btn.playing svg.play-icon-svg {
+        display: none;
+      }
+      .preview-sound-btn:not(.playing) svg.stop-icon-svg {
+        display: none;
+      }
+    </style>
+  </head>
+  <body class="antialiased">
+    <div
+      id="app"
+      class="container mx-auto p-4 max-w-4xl min-h-screen flex flex-col"
+    >
+      <section id="home-screen" class="flex flex-col flex-grow">
+        <header class="flex justify-between items-center mb-6">
+          <h1 class="text-3xl font-bold text-gray-700">Zen Timer</h1>
+          <button
+            id="create-meditation-btn"
+            class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-150 ease-in-out flex items-center"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5 mr-1"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            <span>Create</span>
+          </button>
+        </header>
+        <div class="mb-4 flex flex-col sm:flex-row sm:items-center gap-4">
+          <input
+            type="text"
+            id="search-input"
+            placeholder="Search meditations..."
+            class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-transparent transition duration-150 ease-in-out"
+          />
+          <select
+            id="sort-select"
+            class="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-transparent transition duration-150 ease-in-out bg-white"
+          >
+            <option value="createdAt_desc">Sort by: Created (Newest)</option>
+            <option value="createdAt_asc">Sort by: Created (Oldest)</option>
+            <option value="name_asc">Sort by: Name (A-Z)</option>
+            <option value="name_desc">Sort by: Name (Z-A)</option>
+            <option value="lastPlayedAt_desc">
+              Sort by: Last Played (Recent)
+            </option>
+            <option value="lastPlayedAt_asc">
+              Sort by: Last Played (Oldest)
+            </option>
+          </select>
+          <button
+            id="view-history-btn"
+            class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-lg shadow-sm transition duration-150 ease-in-out flex items-center justify-center sm:justify-start"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5 mr-1"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <span>History</span>
+          </button>
+        </div>
+        <div
+          id="meditation-list"
+          class="space-y-3 flex-grow overflow-y-auto no-scrollbar pb-4"
+        >
+          <p id="no-meditations-msg" class="text-gray-500 italic hidden">
+            No meditations created yet. Click 'Create' to start!
+          </p>
+        </div>
+      </section>
+
+      <section id="edit-screen" class="hidden flex-col flex-grow">
+        <header class="flex justify-between items-center mb-4">
+          <button
+            id="back-to-home-btn"
+            class="text-blue-500 hover:text-blue-700 font-semibold flex items-center p-2 -ml-2"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5 mr-1"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
+            <span>Back</span>
+          </button>
+          <input
+            type="text"
+            id="meditation-name-input"
+            placeholder="Meditation Name"
+            class="flex-grow mx-4 p-2 border border-gray-300 rounded-lg text-xl font-semibold focus:ring-2 focus:ring-blue-300 focus:border-transparent transition duration-150 ease-in-out"
+          />
+          <button
+            id="save-meditation-btn"
+            class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-150 ease-in-out flex items-center"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5 mr-1"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            <span>Save</span>
+          </button>
+        </header>
+        <div class="mb-4 text-right">
+          <span class="text-gray-600 font-medium"
+            >Total Duration:
+            <span id="total-duration-display">00:00:00</span></span
+          >
+        </div>
+        <div
+          id="timer-list"
+          class="space-y-4 flex-grow overflow-y-auto no-scrollbar pb-4 pr-2"
+        >
+          <p id="no-timers-msg" class="text-gray-500 italic hidden">
+            No timers added yet. Click 'Add Timer' below.
+          </p>
+        </div>
+        <footer class="mt-6 pt-4 border-t border-gray-200">
+          <button
+            id="add-timer-btn"
+            class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow transition duration-150 ease-in-out flex items-center justify-center"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5 mr-1"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            <span>Add Timer</span>
+          </button>
+        </footer>
+      </section>
+
+      <section
+        id="playback-screen"
+        class="hidden flex-col flex-grow items-center justify-center text-center p-4"
+      >
+        <div
+          id="loading-indicator"
+          class="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-50"
+        >
+          <svg
+            class="animate-spin h-10 w-10 text-blue-500 mb-4"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
+          </svg>
+          <p class="text-lg text-gray-600">Loading sounds...</p>
+          <button
+            id="exit-playback-loading-btn"
+            class="absolute top-4 right-4 text-gray-500 hover:text-gray-700 z-[51] p-2 rounded-full hover:bg-gray-200 transition duration-150"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-8 w-8"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+        <div id="playback-content" class="w-full max-w-md hidden">
+          <button
+            id="exit-playback-btn"
+            class="absolute top-4 right-4 text-gray-500 hover:text-gray-700 z-10 p-2 rounded-full hover:bg-gray-200 transition duration-150"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-8 w-8"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+          <h2
+            id="playback-meditation-title"
+            class="text-2xl font-semibold text-gray-700 mb-4"
+          >
+            Meditation Title
+          </h2>
+          <div class="relative w-64 h-64 mx-auto mb-8">
+            <svg class="w-full h-full" viewBox="0 0 100 100">
+              <circle
+                class="progress-ring__background"
+                stroke-width="8"
+                fill="transparent"
+                r="45"
+                cx="50"
+                cy="50"
+              />
+              <circle
+                class="progress-ring__circle"
+                stroke-width="8"
+                fill="transparent"
+                r="45"
+                cx="50"
+                cy="50"
+              />
+              <g class="progress-ring__markers"></g>
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center">
+              <button
+                id="play-pause-btn"
+                class="w-24 h-24 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg transition duration-150 ease-in-out focus:outline-none focus:ring-4 focus:ring-blue-300"
+              >
+                <svg
+                  id="play-icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-12 w-12"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fill-rule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+
+                <svg
+                  id="pause-icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-10 w-10 hidden"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fill-rule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div
+            id="current-timer-info"
+            class="mb-6 h-32 overflow-y-auto no-scrollbar"
+          >
+            <h3
+              id="current-timer-title"
+              class="text-xl font-medium text-gray-600 mb-1"
+            >
+              Timer Title
+            </h3>
+            <p id="current-timer-description" class="text-gray-500 mb-3">
+              Timer description goes here...
+            </p>
+          </div>
+          <div class="text-lg font-semibold text-gray-700">
+            <span id="current-timer-time">00:00:00</span> /
+            <span id="current-timer-duration">00:00:00</span>
+          </div>
+          <div class="text-sm text-gray-500 mt-1">
+            Overall: <span id="overall-timer-time">00:00:00</span> /
+            <span id="overall-timer-duration">00:00:00</span>
+          </div>
+        </div>
+      </section>
+
+      <div id="confirmation-modal" class="modal">
+        <div class="modal-content">
+          <h3 class="text-lg font-semibold mb-4" id="confirmation-title">
+            Confirm Action
+          </h3>
+          <p class="mb-6" id="confirmation-message">Are you sure?</p>
+          <div class="flex justify-end space-x-3">
+            <button
+              id="confirm-cancel-btn"
+              class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-lg transition duration-150"
+            >
+              Cancel
+            </button>
+            <button
+              id="confirm-ok-btn"
+              class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-150"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      </div>
+      <div id="history-modal" class="modal">
+        <div class="modal-content">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold">Meditation History</h3>
+            <button
+              id="close-history-btn"
+              class="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-200"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+          <div
+            id="history-log-content"
+            class="max-h-80 overflow-y-auto space-y-2 pr-2"
+          >
+            <p id="no-history-msg" class="text-gray-500 italic hidden">
+              No meditations completed yet.
+            </p>
+          </div>
+          <div class="mt-4 text-right">
+            <button
+              id="clear-history-btn"
+              class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-150 text-sm"
+            >
+              Clear History
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // --- Constants ---
+      const APP_PREFIX = "zenTimerApp_";
+      const MEDITATIONS_KEY = `${APP_PREFIX}meditations`;
+      const HISTORY_KEY = `${APP_PREFIX}history`;
+      const TICK_INTERVAL = 250; // ms for smoother progress updates
+
+      // --- Available Sounds ---
+      const SOUNDS = [
+        { id: "none", name: "Silence / None", url: null },
+        {
+          id: "budadadum",
+          name: "Budadadum",
+          url: "https://codeskulptor-demos.commondatastorage.googleapis.com/descent/gotitem.mp3",
+        },
+        {
+          id: "singing_bowl",
+          name: "Hit Singing Bowl",
+          url: "https://cdn.freesound.org/previews/240/240934_3597112-lq.mp3",
+        },
+        {
+          id: "bell_meditation",
+          name: "Meditation Bell",
+          url: "https://cdn.freesound.org/previews/271/271370_5159066-lq.mp3",
+        },
+        {
+          id: "simple_chime",
+          name: "Simple Chime",
+          url: "https://cdn.freesound.org/previews/398/398492_5923045-lq.mp3",
+        },
+        {
+          id: "thunder_storm",
+          name: "Thunderstorm",
+          url: "https://cdn.freesound.org/previews/697/697397_13355471-lq.mp3",
+        },
+        {
+          id: "chill_ambience",
+          name: "Chill Ambience",
+          url: "https://cdn.freesound.org/previews/742/742808_5820974-lq.mp3",
+        },
+        {
+          id: "stream_birdsong",
+          name: "Stream & Birdsong",
+          url: "https://cdn.freesound.org/previews/559/559542_5985747-lq.mp3",
+        },
+      ];
+
+      // --- State ---
+      let meditations = [];
+      let history = [];
+      let currentEditMeditationId = null;
+      let sortableInstance = null;
+      let fuseInstance = null;
+      let currentPlaybackState = {
+        meditation: null, // Holds the *current* meditation object being played/paused/finished
+        meditationIdToPlay: null, // Holds the ID for restart purposes
+        timerIndex: 0,
+        elapsedInTimer: 0, // Time elapsed in current timer in SECONDS
+        totalElapsed: 0, // Total time elapsed in SECONDS
+        intervalId: null,
+        isPaused: true,
+        soundPlayers: {},
+        requiredSounds: [],
+        soundsLoaded: false,
+        status: "idle", // idle, loading, playing, paused, finished, restarting
+      };
+      let confirmationCallback = null;
+      let previewAudio = null; // Single Audio object for previews
+      let activePreviewButton = null; // Track which preview button is active
+      let hasUnsavedChanges = false; // Track changes in edit screen
+
+      // --- DOM Elements ---
+      const homeScreen = document.getElementById("home-screen");
+      const editScreen = document.getElementById("edit-screen");
+      const playbackScreen = document.getElementById("playback-screen");
+      const meditationListEl = document.getElementById("meditation-list");
+      const timerListEl = document.getElementById("timer-list");
+      const createMeditationBtn = document.getElementById(
+        "create-meditation-btn"
+      );
+      const backToHomeBtn = document.getElementById("back-to-home-btn");
+      const saveMeditationBtn = document.getElementById("save-meditation-btn");
+      const addTimerBtn = document.getElementById("add-timer-btn");
+      const meditationNameInput = document.getElementById(
+        "meditation-name-input"
+      );
+      const searchInput = document.getElementById("search-input");
+      const sortSelect = document.getElementById("sort-select");
+      const totalDurationDisplay = document.getElementById(
+        "total-duration-display"
+      );
+      const noMeditationsMsg = document.getElementById("no-meditations-msg");
+      const noTimersMsg = document.getElementById("no-timers-msg");
+      const loadingIndicator = document.getElementById("loading-indicator");
+      const playbackContent = document.getElementById("playback-content");
+      const exitPlaybackBtn = document.getElementById("exit-playback-btn");
+      const exitPlaybackLoadingBtn = document.getElementById(
+        "exit-playback-loading-btn"
+      );
+      const playPauseBtn = document.getElementById("play-pause-btn");
+      const playIcon = document.getElementById("play-icon");
+      const pauseIcon = document.getElementById("pause-icon");
+      const playbackMeditationTitle = document.getElementById(
+        "playback-meditation-title"
+      );
+      const currentTimerTitle = document.getElementById("current-timer-title");
+      const currentTimerDescription = document.getElementById(
+        "current-timer-description"
+      );
+      const currentTimerTime = document.getElementById("current-timer-time");
+      const currentTimerDuration = document.getElementById(
+        "current-timer-duration"
+      );
+      const overallTimerTime = document.getElementById("overall-timer-time");
+      const overallTimerDuration = document.getElementById(
+        "overall-timer-duration"
+      );
+      const progressRingCircle = document.querySelector(
+        ".progress-ring__circle"
+      );
+      const progressRingMarkers = document.querySelector(
+        ".progress-ring__markers"
+      );
+      const radius = progressRingCircle.r.baseVal.value;
+      const circumference = 2 * Math.PI * radius;
+      const confirmationModal = document.getElementById("confirmation-modal");
+      const confirmationTitle = document.getElementById("confirmation-title");
+      const confirmationMessage = document.getElementById(
+        "confirmation-message"
+      );
+      const confirmOkBtn = document.getElementById("confirm-ok-btn");
+      const confirmCancelBtn = document.getElementById("confirm-cancel-btn");
+      const historyModal = document.getElementById("history-modal");
+      const viewHistoryBtn = document.getElementById("view-history-btn");
+      const closeHistoryBtn = document.getElementById("close-history-btn");
+      const historyLogContent = document.getElementById("history-log-content");
+      const noHistoryMsg = document.getElementById("no-history-msg");
+      const clearHistoryBtn = document.getElementById("clear-history-btn");
+
+      // --- Utility Functions ---
+      const generateId = () =>
+        `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      const formatTime = (totalSeconds) => {
+        if (isNaN(totalSeconds) || totalSeconds < 0) return "00:00:00";
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = Math.floor(totalSeconds % 60);
+        return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+          2,
+          "0"
+        )}:${String(seconds).padStart(2, "0")}`;
+      };
+      const secondsToTime = (totalSeconds) => {
+        if (isNaN(totalSeconds) || totalSeconds < 0)
+          return { h: 0, m: 0, s: 0 };
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const s = Math.floor(totalSeconds % 60);
+        return { h, m, s };
+      };
+      const calculateTotalDuration = (timers) =>
+        timers.reduce(
+          (sum, timer) => sum + (parseInt(timer.duration, 10) || 0),
+          0
+        );
+      const saveMeditations = () => {
+        try {
+          localStorage.setItem(MEDITATIONS_KEY, JSON.stringify(meditations));
+        } catch (e) {
+          console.error("Error saving meditations:", e);
+          alert("Could not save meditations.");
+        }
+      };
+      const loadMeditations = () => {
+        try {
+          const stored = localStorage.getItem(MEDITATIONS_KEY);
+          meditations = stored ? JSON.parse(stored) : [];
+          meditations.forEach((med) =>
+            med.timers.forEach((t) => {
+              if (typeof t.duration !== "number")
+                t.duration = parseInt(t.duration) || 0;
+            })
+          );
+        } catch (e) {
+          console.error("Error loading meditations:", e);
+          meditations = [];
+          alert("Could not load saved meditations.");
+        }
+      };
+      const saveHistory = () => {
+        try {
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        } catch (e) {
+          console.error("Error saving history:", e);
+          alert("Could not save history.");
+        }
+      };
+      const loadHistory = () => {
+        try {
+          const stored = localStorage.getItem(HISTORY_KEY);
+          history = stored ? JSON.parse(stored) : [];
+        } catch (e) {
+          console.error("Error loading history:", e);
+          history = [];
+          alert("Could not load saved history.");
+        }
+      };
+      const showScreen = (screenId) => {
+        [homeScreen, editScreen, playbackScreen].forEach((screen) =>
+          screen.classList.add("hidden", "flex")
+        ); // Add flex back for proper hiding/showing
+        document
+          .querySelectorAll("#app > section")
+          .forEach((s) => s.classList.add("hidden")); // Hide all direct children sections
+        const screenToShow = document.getElementById(screenId);
+        if (screenToShow) {
+          screenToShow.classList.remove("hidden");
+          screenToShow.classList.add("flex", "flex-col"); // Ensure flex column layout
+          if (screenId === "playback-screen")
+            screenToShow.classList.add("items-center", "justify-center");
+        }
+      };
+      const setUnsavedChanges = (value) => {
+        hasUnsavedChanges = value;
+      };
+
+      // --- Confirmation Modal Logic ---
+      const showConfirmation = (title, message, onConfirm) => {
+        confirmationTitle.textContent = title;
+        confirmationMessage.textContent = message;
+        confirmationCallback = onConfirm;
+        confirmationModal.style.display = "block";
+      };
+      const hideConfirmation = () => {
+        confirmationModal.style.display = "none";
+        confirmationCallback = null;
+      };
+      confirmOkBtn.addEventListener("click", () => {
+        if (confirmationCallback) confirmationCallback();
+        hideConfirmation();
+      });
+      confirmCancelBtn.addEventListener("click", hideConfirmation);
+      window.addEventListener("click", (event) => {
+        if (event.target == confirmationModal) hideConfirmation();
+        if (event.target == historyModal) hideHistoryModal();
+      });
+
+      // --- History Modal Logic ---
+      const showHistoryModal = () => {
+        renderHistoryLog();
+        historyModal.style.display = "block";
+      };
+      const hideHistoryModal = () => {
+        historyModal.style.display = "none";
+      };
+      const renderHistoryLog = () => {
+        historyLogContent.innerHTML = "";
+        if (history.length === 0) {
+          noHistoryMsg.classList.remove("hidden");
+          clearHistoryBtn.classList.add("hidden");
+          return;
+        }
+        noHistoryMsg.classList.add("hidden");
+        clearHistoryBtn.classList.remove("hidden");
+        const sortedHistory = [...history].sort(
+          (a, b) => new Date(b.completedAt) - new Date(a.completedAt)
+        );
+        sortedHistory.forEach((entry) => {
+          const div = document.createElement("div");
+          div.className = "p-2 border-b border-gray-200 text-sm";
+          const completedDate = new Date(entry.completedAt);
+          const dateString = completedDate.toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
+          const timeString = completedDate.toLocaleTimeString(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+          });
+          const durationText = entry.isPartial
+            ? `(Partial: ${formatTime(entry.durationCompleted)})`
+            : `Duration: ${formatTime(entry.totalDuration)}`;
+          div.innerHTML = `
+                     <p class="font-medium">${
+                       entry.meditationName || "Untitled Meditation"
+                     } ${
+            entry.isPartial
+              ? '<span class="text-xs text-orange-500 font-normal">[Exited Early]</span>'
+              : ""
+          }</p>
+                     <p class="text-gray-600">Completed: ${dateString} at ${timeString}</p>
+                     <p class="text-gray-500">${durationText}</p>`;
+          historyLogContent.appendChild(div);
+        });
+      };
+      const clearHistory = () => {
+        showConfirmation("Clear History", "Are you sure?", () => {
+          history = [];
+          saveHistory();
+          renderHistoryLog();
+        });
+      };
+      viewHistoryBtn.addEventListener("click", showHistoryModal);
+      closeHistoryBtn.addEventListener("click", hideHistoryModal);
+      clearHistoryBtn.addEventListener("click", clearHistory);
+
+      // --- Sound Management ---
+      const stopPreviewSound = () => {
+        if (previewAudio && !previewAudio.paused) {
+          previewAudio.pause();
+          previewAudio.currentTime = 0;
+          previewAudio.loop = false; // Ensure loop is off
+        }
+        if (activePreviewButton) {
+          activePreviewButton.classList.remove("playing"); // Reset button state
+          activePreviewButton = null;
+        }
+      };
+
+      const previewSound = (soundId, isLooping, buttonElement) => {
+        // If the clicked button is already active, stop it
+        if (buttonElement === activePreviewButton) {
+          stopPreviewSound();
+          return;
+        }
+
+        // Stop any currently playing preview first
+        stopPreviewSound();
+
+        if (!soundId || soundId === "none") return;
+
+        const soundInfo = SOUNDS.find((s) => s.id === soundId);
+        if (!soundInfo || !soundInfo.url) {
+          console.warn(`Preview failed: Sound info not found: ${soundId}`);
+          alert(`Cannot preview sound: ${soundId}`);
+          return;
+        }
+
+        previewAudio = new Audio(soundInfo.url);
+        previewAudio.addEventListener("error", (e) => {
+          console.error(`Error previewing sound ${soundId}:`, e);
+          alert(`Error playing preview for ${soundId}.`);
+          stopPreviewSound();
+        }); // Stop on error
+
+        previewAudio
+          .play()
+          .then(() => {
+            activePreviewButton = buttonElement; // Set the new active button
+            activePreviewButton.classList.add("playing"); // Update button state
+            if (isLooping) {
+              previewAudio.loop = true;
+            } else {
+              previewAudio.loop = false;
+              // For non-looping sounds, remove 'playing' state when done
+              previewAudio.addEventListener("ended", stopPreviewSound);
+            }
+          })
+          .catch((e) => {
+            console.error(`Error initiating preview for ${soundId}:`, e);
+            alert(`Could not start preview for ${soundId}.`);
+            stopPreviewSound();
+          }); // Stop on play error
+      };
+
+      const preloadSounds = (meditation) => {
+        return new Promise(async (resolve, reject) => {
+          // Store the status *at the start* of this specific preload attempt
+          const initialStatus = currentPlaybackState.status;
+
+          currentPlaybackState.requiredSounds = [];
+          currentPlaybackState.soundPlayers = {}; // Clear only for this attempt
+          currentPlaybackState.soundsLoaded = false;
+
+          const soundIds = new Set();
+          meditation.timers.forEach((timer) => {
+            if (timer.startSound && timer.startSound !== "none")
+              soundIds.add(timer.startSound);
+            if (timer.endSound && timer.endSound !== "none")
+              soundIds.add(timer.endSound);
+            if (timer.duringSound && timer.duringSound !== "none")
+              soundIds.add(timer.duringSound);
+          });
+
+          currentPlaybackState.requiredSounds = [...soundIds];
+          if (currentPlaybackState.requiredSounds.length === 0) {
+            // Check if status is still relevant before resolving
+            if (currentPlaybackState.status === initialStatus) {
+              currentPlaybackState.soundsLoaded = true;
+              resolve();
+            } else {
+              console.log(
+                "Preload aborted (no sounds): Status changed during process."
+              );
+              // Don't resolve or reject if status changed, let the new process handle it
+            }
+            return;
+          }
+
+          let loadedCount = 0;
+          const totalSounds = currentPlaybackState.requiredSounds.length;
+          let errors = [];
+
+          currentPlaybackState.requiredSounds.forEach((soundId) => {
+            // Early exit if status changed during the loop
+            if (currentPlaybackState.status !== initialStatus) {
+              console.log(
+                `Preload loop aborted for ${soundId}: Status changed.`
+              );
+              return; // Stop processing more sounds for this attempt
+            }
+
+            const soundInfo = SOUNDS.find((s) => s.id === soundId);
+            if (!soundInfo || !soundInfo.url) {
+              console.warn(`Playback Load: Sound info missing: ${soundId}`);
+              loadedCount++;
+              if (
+                loadedCount === totalSounds &&
+                currentPlaybackState.status === initialStatus
+              ) {
+                currentPlaybackState.soundsLoaded = true;
+                if (errors.length === 0) resolve();
+                else reject(new Error(`Failed: ${errors.join(", ")}`));
+              }
+              return;
+            }
+
+            const audio = new Audio(soundInfo.url);
+            audio.preload = "auto";
+
+            const onCanPlay = () => {
+              // CRITICAL CHECK: Only proceed if the status hasn't changed since preload started
+              if (currentPlaybackState.status !== initialStatus) {
+                console.log(
+                  `onCanPlay ignored for ${soundId}: Status changed from ${initialStatus} to ${currentPlaybackState.status}`
+                );
+                cleanupListeners();
+                return;
+              }
+              currentPlaybackState.soundPlayers[soundId] = audio;
+              loadedCount++;
+              cleanupListeners();
+              if (loadedCount === totalSounds) {
+                currentPlaybackState.soundsLoaded = true;
+                if (errors.length === 0) resolve();
+                else reject(new Error(`Failed: ${errors.join(", ")}`));
+              }
+            };
+
+            const onError = (e) => {
+              // CRITICAL CHECK: Only proceed if the status hasn't changed
+              if (currentPlaybackState.status !== initialStatus) {
+                console.log(
+                  `onError ignored for ${soundId}: Status changed from ${initialStatus} to ${currentPlaybackState.status}`
+                );
+                cleanupListeners();
+                return;
+              }
+              console.error(`Playback Error loading sound: ${soundId}`, e);
+              errors.push(soundId);
+              loadedCount++;
+              cleanupListeners();
+              if (loadedCount === totalSounds) {
+                currentPlaybackState.soundsLoaded = true; // Mark attempt as finished
+                reject(new Error(`Failed: ${errors.join(", ")}`)); // Reject with errors
+              }
+            };
+
+            const cleanupListeners = () => {
+              audio.removeEventListener("canplaythrough", onCanPlay);
+              audio.removeEventListener("error", onError);
+            };
+
+            audio.addEventListener("canplaythrough", onCanPlay);
+            audio.addEventListener("error", onError);
+            audio.load();
+
+            // Timeout check still useful, but also check status
+            setTimeout(() => {
+              if (
+                currentPlaybackState.status === initialStatus &&
+                !currentPlaybackState.soundPlayers[soundId] &&
+                !errors.includes(soundId)
+              ) {
+                console.warn(`Playback Timeout: ${soundId}.`);
+                onError(new Error("Timeout"));
+              }
+            }, 15000);
+          });
+          // Check if the loop was aborted early
+          if (currentPlaybackState.status !== initialStatus) {
+            console.log(
+              "Preload promise not resolved/rejected: Status changed mid-process."
+            );
+            // Do not resolve or reject, let the new state handle itself.
+          }
+        });
+      };
+      const playSound = (soundId, loop = false) => {
+        // Add status check before playing
+        if (
+          currentPlaybackState.status !== "playing" &&
+          currentPlaybackState.status !== "finished"
+        ) {
+          // Allow final sound in 'finished'
+          console.log(
+            `playSound blocked for ${soundId}: Status is ${currentPlaybackState.status}`
+          );
+          return;
+        }
+        const audio = currentPlaybackState.soundPlayers[soundId];
+        if (audio) {
+          audio.loop = loop;
+          audio.currentTime = 0; // Reset before playing
+          audio
+            .play()
+            .catch((e) => console.error(`Error playing sound ${soundId}:`, e));
+        } else {
+          console.warn(
+            `Attempted to play sound but player not found: ${soundId}`
+          );
+        }
+      };
+      const stopSound = (soundId) => {
+        const audio = currentPlaybackState.soundPlayers[soundId];
+        if (audio) {
+          audio.pause();
+          audio.currentTime = 0;
+        }
+      };
+      const stopAllSounds = (exceptSoundId = null) => {
+        // Add exception parameter
+        Object.entries(currentPlaybackState.soundPlayers).forEach(
+          ([id, audio]) => {
+            if (audio && id !== exceptSoundId) {
+              // Check if it's the exception
+              audio.pause();
+              audio.currentTime = 0;
+            }
+          }
+        );
+        // Stop preview sound regardless
+        stopPreviewSound();
+      };
+
+      // --- Rendering Functions ---
+      const renderMeditationList = (items = meditations) => {
+        // (Keep existing renderMeditationList logic)
+        meditationListEl.innerHTML = "";
+        if (items.length === 0) {
+          noMeditationsMsg.classList.remove("hidden");
+          return;
+        }
+        noMeditationsMsg.classList.add("hidden");
+        const [sortKey, sortDir] = sortSelect.value.split("_");
+        items.sort((a, b) => {
+          let vA, vB;
+          if (sortKey === "name") {
+            vA = a.name.toLowerCase();
+            vB = b.name.toLowerCase();
+          } else if (sortKey === "createdAt") {
+            vA = new Date(a.createdAt);
+            vB = new Date(b.createdAt);
+          } else {
+            vA = a.lastPlayedAt ? new Date(a.lastPlayedAt) : new Date(0);
+            vB = b.lastPlayedAt ? new Date(b.lastPlayedAt) : new Date(0);
+          }
+          let c = vA < vB ? -1 : vA > vB ? 1 : 0;
+          return sortDir === "asc" ? c : c * -1;
+        });
+        items.forEach((med) => {
+          const div = document.createElement("div");
+          div.className =
+            "bg-white p-4 rounded-lg shadow hover:shadow-md transition duration-150 ease-in-out flex justify-between items-center";
+          div.dataset.id = med.id;
+          const dur = calculateTotalDuration(med.timers);
+          const lp = med.lastPlayedAt
+            ? `Last played: ${new Date(med.lastPlayedAt).toLocaleDateString()}`
+            : "Never played";
+          div.innerHTML = `<div class="flex-grow mr-4 overflow-hidden"><h3 class="text-lg font-semibold text-gray-800 truncate">${
+            med.name || "Untitled"
+          }</h3><p class="text-sm text-gray-500">Duration: ${formatTime(
+            dur
+          )} | ${lp}</p></div><div class="flex space-x-2 flex-shrink-0"><button class="play-btn text-green-500 hover:text-green-700 p-2 rounded-full hover:bg-green-100" title="Play"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" /></svg></button><button class="edit-btn text-blue-500 hover:text-blue-700 p-2 rounded-full hover:bg-blue-100" title="Edit"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button><button class="delete-btn text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-100" title="Delete"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div>`;
+          div.querySelector(".play-btn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            startPlayback(med.id);
+          });
+          div.querySelector(".edit-btn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            editMeditation(med.id);
+          });
+          div.querySelector(".delete-btn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteMeditation(med.id);
+          });
+          meditationListEl.appendChild(div);
+        });
+      };
+
+      const renderTimerList = (timers = []) => {
+        timerListEl.innerHTML = "";
+        if (timers.length === 0) noTimersMsg.classList.remove("hidden");
+        else noTimersMsg.classList.add("hidden");
+
+        timers.forEach((timer, index) => {
+          const div = document.createElement("div");
+          div.className =
+            "timer-item bg-white p-4 rounded-lg border border-gray-200 shadow-sm";
+          div.dataset.id = timer.id;
+          const hms = secondsToTime(timer.duration);
+          const createSoundOptions = (selectedSoundId) =>
+            SOUNDS.map(
+              (sound) =>
+                `<option value="${sound.id}" ${
+                  selectedSoundId === sound.id ? "selected" : ""
+                }>${sound.name}</option>`
+            ).join("");
+
+          // Note: Removed the #${index + 1} span
+          div.innerHTML = `
+                    <div class="flex items-center mb-3 gap-3 flex-wrap">
+                         <button class="drag-handle cursor-move text-gray-400 hover:text-gray-600 p-1 flex-shrink-0" title="Drag to reorder">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                        </button>
+                        <input type="text" placeholder="Timer Title (Optional)" value="${
+                          timer.title || ""
+                        }" class="timer-title-input flex-grow p-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-300 focus:border-transparent transition duration-150 min-w-[150px]">
+                        <div class="flex items-center gap-1 flex-shrink-0">
+                             <input type="number" min="0" value="${
+                               hms.h
+                             }" class="timer-duration-h w-12 p-2 text-center border border-gray-300 rounded-md" aria-label="Hours"> <span class="text-gray-500">h</span>
+                             <input type="number" min="0" max="59" value="${
+                               hms.m
+                             }" class="timer-duration-m w-12 p-2 text-center border border-gray-300 rounded-md" aria-label="Minutes"> <span class="text-gray-500">m</span>
+                             <input type="number" min="0" max="59" value="${
+                               hms.s
+                             }" class="timer-duration-s w-12 p-2 text-center border border-gray-300 rounded-md" aria-label="Seconds"> <span class="text-gray-500">s</span>
+                        </div>
+                         <button class="duplicate-timer-btn text-blue-500 hover:text-blue-700 p-1 rounded-full hover:bg-blue-100 transition duration-150 flex-shrink-0" title="Duplicate Timer">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                         </button>
+                         <button class="delete-timer-btn text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition duration-150 flex-shrink-0" title="Delete Timer">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                         </button>
+                    </div>
+                    <textarea placeholder="Timer Description (Optional)" class="timer-description-input w-full p-2 border border-gray-300 rounded-md mb-3 h-20 resize-y">${
+                      timer.description || ""
+                    }</textarea>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-3">
+                        ${["start", "end", "during"]
+                          .map(
+                            (type) => `
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1 capitalize">${type} Sound${
+                              type === "during" ? " (Loop)" : ""
+                            }:</label>
+                            <div class="flex items-center gap-2">
+                                <select class="timer-${type}-sound-select w-full p-2 border border-gray-300 rounded-md bg-white">
+                                    ${createSoundOptions(timer[`${type}Sound`])}
+                                </select>
+                                <button class="preview-sound-btn p-2 text-blue-500 hover:text-blue-700 rounded-full hover:bg-blue-100 transition duration-150 flex-shrink-0" data-sound-type="${type}" title="Preview ${type} sound">
+                                    <svg class="h-5 w-5 play-icon-svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"/></svg>
+                                    <svg class="h-5 w-5 stop-icon-svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" /></svg>
+                                </button>
+                            </div>
+                        </div>`
+                          )
+                          .join("")}
+                    </div>`;
+          timerListEl.appendChild(div);
+
+          // Add event listeners for timer controls & unsaved changes flag
+          div
+            .querySelector(".delete-timer-btn")
+            .addEventListener("click", () => {
+              deleteTimer(timer.id);
+              setUnsavedChanges(true);
+            });
+          div
+            .querySelector(".duplicate-timer-btn")
+            .addEventListener("click", () => {
+              duplicateTimer(timer.id);
+              setUnsavedChanges(true);
+            });
+          div
+            .querySelectorAll("input, textarea, select")
+            .forEach((el) =>
+              el.addEventListener("input", () => setUnsavedChanges(true))
+            ); // Track changes on any input/select
+
+          // Add listeners for preview buttons
+          div.querySelectorAll(".preview-sound-btn").forEach((button) => {
+            button.addEventListener("click", (e) => {
+              const type = button.dataset.soundType;
+              const select = div.querySelector(`.timer-${type}-sound-select`);
+              previewSound(select.value, type === "during", button); // Pass button element
+            });
+          });
+          // Update total duration display immediately when H:M:S inputs change
+          ["h", "m", "s"].forEach((unit) => {
+            const input = div.querySelector(`.timer-duration-${unit}`);
+            input.addEventListener("input", updateEditScreenTotalDuration);
+            input.addEventListener("change", updateEditScreenTotalDuration); // Capture blur/enter
+          });
+        });
+
+        if (sortableInstance) sortableInstance.destroy();
+        sortableInstance = new Sortable(timerListEl, {
+          animation: 150,
+          ghostClass: "sortable-ghost",
+          chosenClass: "sortable-chosen",
+          handle: ".drag-handle",
+          onEnd: handleTimerReorder,
+        });
+        updateEditScreenTotalDuration();
+      };
+
+      const updateEditScreenTotalDuration = () => {
+        const currentTimers = getCurrentTimersFromDOM();
+        totalDurationDisplay.textContent = formatTime(
+          calculateTotalDuration(currentTimers)
+        );
+      };
+
+      const getCurrentTimersFromDOM = () => {
+        const timerElements = timerListEl.querySelectorAll(".timer-item");
+        return Array.from(timerElements).map((el) => {
+          const h = parseInt(el.querySelector(".timer-duration-h").value) || 0;
+          const m = parseInt(el.querySelector(".timer-duration-m").value) || 0;
+          const s = parseInt(el.querySelector(".timer-duration-s").value) || 0;
+          return {
+            id: el.dataset.id,
+            duration: h * 3600 + m * 60 + s,
+            title: el.querySelector(".timer-title-input").value.trim() || null,
+            description:
+              el.querySelector(".timer-description-input").value.trim() || null,
+            startSound: el.querySelector(".timer-start-sound-select").value,
+            endSound: el.querySelector(".timer-end-sound-select").value,
+            duringSound: el.querySelector(".timer-during-sound-select").value,
+          };
+        });
+      };
+
+      const handleTimerReorder = (evt) => {
+        setUnsavedChanges(true);
+        const currentTimers = getCurrentTimersFromDOM();
+        renderTimerList(currentTimers);
+      };
+
+      // --- Core Logic Functions ---
+      const editMeditation = (id = null) => {
+        currentEditMeditationId = id;
+        let meditationToEdit = {
+          name: "",
+          timers: [],
+          createdAt: new Date().toISOString(),
+          lastPlayedAt: null,
+        };
+        if (id) {
+          const found = meditations.find((m) => m.id === id);
+          if (found) meditationToEdit = JSON.parse(JSON.stringify(found));
+          else {
+            console.error("Meditation not found:", id);
+            currentEditMeditationId = null;
+            return;
+          }
+        }
+        meditationNameInput.value = meditationToEdit.name;
+        renderTimerList(meditationToEdit.timers);
+        setUnsavedChanges(false); // Reset flag when loading editor
+        showScreen("edit-screen");
+        meditationNameInput.addEventListener("input", () =>
+          setUnsavedChanges(true)
+        ); // Also track name changes
+      };
+
+      const saveMeditation = () => {
+        const name = meditationNameInput.value.trim() || "Untitled Meditation";
+        const timers = getCurrentTimersFromDOM();
+        if (timers.length === 0) {
+          alert("Please add at least one timer.");
+          return;
+        }
+        if (timers.some((t) => t.duration <= 0)) {
+          alert("Timers must have > 0 duration.");
+          return;
+        }
+
+        if (currentEditMeditationId) {
+          const index = meditations.findIndex(
+            (m) => m.id === currentEditMeditationId
+          );
+          if (index > -1) {
+            meditations[index].name = name;
+            meditations[index].timers = timers;
+          } else {
+            console.error(
+              "Failed to find meditation to update:",
+              currentEditMeditationId
+            );
+            const newMed = {
+              id: generateId(),
+              name,
+              timers,
+              createdAt: new Date().toISOString(),
+              lastPlayedAt: null,
+            };
+            meditations.push(newMed);
+          }
+        } else {
+          const newMed = {
+            id: generateId(),
+            name,
+            timers,
+            createdAt: new Date().toISOString(),
+            lastPlayedAt: null,
+          };
+          meditations.push(newMed);
+        }
+        saveMeditations();
+        initializeFuse();
+        renderMeditationList();
+        setUnsavedChanges(false); // Reset flag on save
+        showScreen("home-screen");
+        currentEditMeditationId = null;
+      };
+
+      const deleteMeditation = (id) => {
+        const med = meditations.find((m) => m.id === id);
+        showConfirmation(
+          "Delete Meditation",
+          `Delete "${med ? med.name : "this"}"?`,
+          () => {
+            meditations = meditations.filter((m) => m.id !== id);
+            saveMeditations();
+            initializeFuse();
+            renderMeditationList();
+          }
+        );
+      };
+      const addTimer = () => {
+        const newTimer = {
+          id: generateId(),
+          duration: 60,
+          title: null,
+          description: null,
+          startSound: "none",
+          endSound: "none",
+          duringSound: "none",
+        };
+        const currentTimers = getCurrentTimersFromDOM();
+        currentTimers.push(newTimer);
+        renderTimerList(currentTimers);
+        setUnsavedChanges(true);
+      };
+      const deleteTimer = (timerId) => {
+        const currentTimers = getCurrentTimersFromDOM();
+        renderTimerList(currentTimers.filter((t) => t.id !== timerId));
+        setUnsavedChanges(true);
+      };
+      const duplicateTimer = (timerId) => {
+        const timers = getCurrentTimersFromDOM();
+        const timerIdx = timers.findIndex((t) => t.id === timerId);
+        if (timerIdx > -1) {
+          const dup = { ...timers[timerIdx], id: generateId() };
+          timers.splice(timerIdx + 1, 0, dup);
+          renderTimerList(timers);
+          setUnsavedChanges(true);
+        }
+      };
+
+      // --- Playback Logic ---
+      const startPlayback = async (meditationId) => {
+        // Find the meditation data first
+        const meditation = meditations.find((m) => m.id === meditationId);
+        if (!meditation || meditation.timers.length === 0) {
+          alert("Cannot play: Meditation not found or has no timers.");
+          currentPlaybackState.status = "idle"; // Ensure status is idle if failed
+          return;
+        }
+        // Prevent starting if already loading or playing the *same* meditation
+        // Allow restarting by checking status != 'restarting'
+        if (
+          (currentPlaybackState.status === "loading" ||
+            currentPlaybackState.status === "playing") &&
+          currentPlaybackState.meditationIdToPlay === meditationId
+        ) {
+          console.warn("Already loading or playing this meditation.");
+          return;
+        }
+
+        // Reset state *after* finding data and checking status
+        resetPlaybackState();
+
+        // Now set up the new state
+        currentPlaybackState.meditation = JSON.parse(
+          JSON.stringify(meditation)
+        ); // Use a fresh copy
+        currentPlaybackState.meditationIdToPlay = meditationId; // Store the ID we are playing
+        currentPlaybackState.status = "loading";
+
+        showScreen("playback-screen");
+        loadingIndicator.classList.remove("hidden");
+        playbackContent.classList.add("hidden");
+
+        try {
+          await preloadSounds(currentPlaybackState.meditation);
+          // Ensure we are still in the loading state (user might have exited)
+          if (currentPlaybackState.status !== "loading") {
+            console.log(
+              "StartPlayback aborted: Status changed during preload."
+            );
+            return; // Exit if status changed
+          }
+
+          currentPlaybackState.status = "ready";
+          loadingIndicator.classList.add("hidden");
+          playbackContent.classList.remove("hidden");
+          setupPlaybackUI();
+          resumePlayback(); // Autostart
+        } catch (error) {
+          console.error("Failed to preload sounds:", error);
+          // Check status again before showing alert (user might have exited)
+          if (currentPlaybackState.status === "loading") {
+            alert(
+              `Error loading sounds: ${
+                error.message || "Cannot start playback."
+              }`
+            );
+            currentPlaybackState.status = "idle";
+            loadingIndicator.classList.add("hidden");
+            showScreen("home-screen");
+          }
+        }
+      };
+
+      const setupPlaybackUI = () => {
+        const { meditation } = currentPlaybackState;
+        if (!meditation) return; // Guard against missing meditation data
+        playbackMeditationTitle.textContent = meditation.name;
+        const totalDuration = calculateTotalDuration(meditation.timers);
+        overallTimerDuration.textContent = formatTime(totalDuration);
+        overallTimerTime.textContent = formatTime(0);
+        updateProgressRing(0, totalDuration);
+        drawProgressMarkers(meditation.timers, totalDuration);
+        updateTimerDisplay();
+      };
+
+      const playPauseToggle = () => {
+        // Use the stored ID for restart reference
+        const meditationId = currentPlaybackState.meditationIdToPlay;
+        // Prevent action if no ID stored or during loading/restarting phases
+        if (
+          !meditationId ||
+          ["loading", "restarting"].includes(currentPlaybackState.status)
+        )
+          return;
+
+        if (currentPlaybackState.status === "finished") {
+          currentPlaybackState.status = "restarting"; // Prevent double clicks
+          // Start playback will handle the reset now
+          startPlayback(meditationId); // Use the stored ID
+          return;
+        }
+
+        if (currentPlaybackState.isPaused) resumePlayback();
+        else pausePlayback();
+      };
+
+      const resumePlayback = () => {
+        if (
+          !currentPlaybackState.isPaused ||
+          currentPlaybackState.status === "finished" ||
+          !currentPlaybackState.meditation
+        )
+          return;
+        // Update last played time only when starting initially or resuming from pause
+        // Check if meditation object exists before accessing its ID
+        if (
+          currentPlaybackState.meditation.id &&
+          (currentPlaybackState.status === "ready" ||
+            currentPlaybackState.status === "paused")
+        ) {
+          updateLastPlayedTime(currentPlaybackState.meditation.id);
+        }
+
+        currentPlaybackState.isPaused = false;
+        currentPlaybackState.status = "playing";
+        updatePlayPauseButton();
+
+        const currentTimer =
+          currentPlaybackState.meditation.timers[
+            currentPlaybackState.timerIndex
+          ];
+        if (currentTimer?.duringSound !== "none")
+          playSound(currentTimer.duringSound, true);
+        if (
+          currentPlaybackState.elapsedInTimer === 0 &&
+          currentTimer?.startSound !== "none"
+        )
+          playSound(currentTimer.startSound);
+
+        clearInterval(currentPlaybackState.intervalId);
+        currentPlaybackState.intervalId = setInterval(tick, TICK_INTERVAL);
+      };
+
+      const pausePlayback = () => {
+        if (
+          currentPlaybackState.isPaused ||
+          currentPlaybackState.status === "finished"
+        )
+          return;
+        currentPlaybackState.isPaused = true;
+        currentPlaybackState.status = "paused";
+        clearInterval(currentPlaybackState.intervalId);
+        currentPlaybackState.intervalId = null;
+        stopAllSounds();
+        updatePlayPauseButton();
+      };
+
+      const exitPlayback = (force = false) => {
+        const wasPlayingOrPaused = ["playing", "paused"].includes(
+          currentPlaybackState.status
+        );
+        const elapsedDuration = currentPlaybackState.totalElapsed;
+        // Store meditation details *before* potentially resetting state
+        const meditationToLog = currentPlaybackState.meditation
+          ? JSON.parse(JSON.stringify(currentPlaybackState.meditation))
+          : null;
+
+        const confirmExit = () => {
+          clearInterval(currentPlaybackState.intervalId);
+          stopAllSounds();
+
+          if (wasPlayingOrPaused && elapsedDuration > 0 && meditationToLog) {
+            logPartialCompletion(meditationToLog, elapsedDuration);
+          }
+
+          resetPlaybackState(); // Reset fully on exit
+          showScreen("home-screen");
+        };
+
+        // Don't show confirmation if already finished or never really started
+        if (
+          force ||
+          ["idle", "finished", "loading", "ready"].includes(
+            currentPlaybackState.status
+          )
+        ) {
+          confirmExit();
+        } else {
+          showConfirmation(
+            "Exit Meditation",
+            "Exit early? Progress will be logged.",
+            confirmExit
+          );
+        }
+      };
+
+      // Reset playback state completely
+      const resetPlaybackState = () => {
+        clearInterval(currentPlaybackState.intervalId);
+        stopAllSounds();
+        currentPlaybackState = {
+          meditation: null,
+          meditationIdToPlay: null, // Clear the ID on reset
+          timerIndex: 0,
+          elapsedInTimer: 0,
+          totalElapsed: 0,
+          intervalId: null,
+          isPaused: true,
+          soundPlayers: {},
+          requiredSounds: [],
+          soundsLoaded: false,
+          status: "idle", // Reset to idle
+        };
+        updatePlayPauseButton();
+        updateProgressRing(0, 1); // Reset progress bar visually
+        progressRingMarkers.innerHTML = ""; // Clear markers
+      };
+
+      const tick = () => {
+        if (
+          currentPlaybackState.isPaused ||
+          !currentPlaybackState.meditation ||
+          !currentPlaybackState.meditation.timers
+        )
+          return;
+
+        const tickSeconds = TICK_INTERVAL / 1000;
+        const currentTimerIndex = currentPlaybackState.timerIndex;
+        if (
+          currentTimerIndex >= currentPlaybackState.meditation.timers.length
+        ) {
+          console.error("Timer index out of bounds during tick.");
+          finishPlayback();
+          return;
+        }
+        const currentTimer =
+          currentPlaybackState.meditation.timers[currentTimerIndex];
+
+        currentPlaybackState.elapsedInTimer += tickSeconds;
+        currentPlaybackState.totalElapsed += tickSeconds;
+
+        updateTimerDisplay();
+        updateProgressRing(
+          currentPlaybackState.totalElapsed,
+          calculateTotalDuration(currentPlaybackState.meditation.timers)
+        );
+
+        // Check if current timer ended
+        if (
+          currentPlaybackState.elapsedInTimer >=
+          currentTimer.duration - 0.01
+        ) {
+          const overshoot =
+            currentPlaybackState.elapsedInTimer - currentTimer.duration;
+          currentPlaybackState.totalElapsed -= overshoot;
+          currentPlaybackState.elapsedInTimer = currentTimer.duration;
+
+          updateTimerDisplay(); // Final update for this timer
+
+          // Stop looping sound first
+          if (currentTimer.duringSound !== "none")
+            stopSound(currentTimer.duringSound);
+          // Play end sound NOW before moving index
+          if (currentTimer.endSound !== "none")
+            playSound(currentTimer.endSound);
+
+          // Move to next timer
+          currentPlaybackState.timerIndex++;
+          currentPlaybackState.elapsedInTimer = 0;
+
+          if (
+            currentPlaybackState.timerIndex >=
+            currentPlaybackState.meditation.timers.length
+          ) {
+            // Finish playback (will handle final sound if needed)
+            finishPlayback();
+          } else {
+            const nextTimer =
+              currentPlaybackState.meditation.timers[
+                currentPlaybackState.timerIndex
+              ];
+            if (nextTimer.startSound !== "none")
+              playSound(nextTimer.startSound);
+            if (nextTimer.duringSound !== "none")
+              playSound(nextTimer.duringSound, true);
+            updateTimerDisplay();
+          }
+        }
+      };
+
+      const finishPlayback = () => {
+        clearInterval(currentPlaybackState.intervalId);
+        currentPlaybackState.intervalId = null;
+
+        // Get details of the last timer *before* changing status
+        const lastTimerIndex =
+          currentPlaybackState.meditation.timers.length - 1;
+        const lastTimer =
+          lastTimerIndex >= 0
+            ? currentPlaybackState.meditation.timers[lastTimerIndex]
+            : null;
+        const finalEndSoundId =
+          lastTimer?.endSound !== "none" ? lastTimer.endSound : null;
+
+        // Stop all sounds *except* the potential final end sound
+        stopAllSounds(finalEndSoundId);
+
+        // Play the final end sound if it exists
+        // This needs to happen *before* setting status to finished,
+        // otherwise playSound might block it.
+        if (finalEndSoundId) {
+          playSound(finalEndSoundId);
+        }
+
+        // Now set the status and update UI
+        currentPlaybackState.isPaused = true; // Set paused state
+        currentPlaybackState.status = "finished"; // Set status *after* potentially playing sound
+        updatePlayPauseButton(); // Show play/restart icon
+
+        // Log completion *after* setting status
+        logMeditationCompletion(currentPlaybackState.meditation);
+        // Keep the meditation ID stored for potential restart
+        currentPlaybackState.meditationIdToPlay =
+          currentPlaybackState.meditation.id;
+      };
+
+      const logMeditationCompletion = (meditation) => {
+        if (!meditation || !meditation.id) {
+          console.error("Cannot log completion: Invalid meditation data.");
+          return;
+        }
+        const totalDuration = calculateTotalDuration(meditation.timers);
+        const historyEntry = {
+          id: generateId(),
+          meditationId: meditation.id,
+          meditationName: meditation.name,
+          completedAt: new Date().toISOString(),
+          totalDuration: totalDuration,
+          isPartial: false,
+        };
+        history.push(historyEntry);
+        saveHistory();
+        updateLastPlayedTime(meditation.id, true);
+      };
+
+      const logPartialCompletion = (meditation, durationCompleted) => {
+        if (!meditation || !meditation.id || durationCompleted <= 0) return;
+        const totalDuration = calculateTotalDuration(meditation.timers);
+        const historyEntry = {
+          id: generateId(),
+          meditationId: meditation.id,
+          meditationName: meditation.name,
+          completedAt: new Date().toISOString(),
+          totalDuration: totalDuration,
+          durationCompleted: Math.floor(durationCompleted),
+          isPartial: true,
+        };
+        history.push(historyEntry);
+        saveHistory();
+      };
+
+      const updateLastPlayedTime = (meditationId, shouldSave = false) => {
+        const index = meditations.findIndex((m) => m.id === meditationId);
+        if (index > -1) {
+          meditations[index].lastPlayedAt = new Date().toISOString();
+          if (shouldSave) {
+            saveMeditations();
+            renderMeditationList();
+          }
+        }
+      };
+
+      const updateTimerDisplay = () => {
+        const { meditation, timerIndex, elapsedInTimer, totalElapsed } =
+          currentPlaybackState;
+        if (!meditation || !meditation.timers) return; // Add check for timers
+        const currentTimer = meditation.timers[timerIndex];
+        const totalDuration = calculateTotalDuration(meditation.timers);
+
+        if (currentTimer) {
+          currentTimerTitle.textContent =
+            currentTimer.title || `Step ${timerIndex + 1}`;
+          currentTimerDescription.textContent = currentTimer.description || "";
+          currentTimerTime.textContent = formatTime(Math.floor(elapsedInTimer));
+          currentTimerDuration.textContent = formatTime(currentTimer.duration);
+        } else {
+          // Finished state or error
+          currentTimerTitle.textContent = "Finished";
+          currentTimerDescription.textContent = "";
+          currentTimerTime.textContent = formatTime(totalDuration);
+          currentTimerDuration.textContent = formatTime(totalDuration);
+        }
+        overallTimerTime.textContent = formatTime(Math.floor(totalElapsed));
+        overallTimerDuration.textContent = formatTime(totalDuration);
+      };
+
+      const updatePlayPauseButton = () => {
+        if (
+          currentPlaybackState.isPaused ||
+          ["ready", "finished", "idle"].includes(currentPlaybackState.status)
+        ) {
+          playIcon.classList.remove("hidden");
+          pauseIcon.classList.add("hidden");
+          playPauseBtn.setAttribute(
+            "title",
+            currentPlaybackState.status === "finished" ? "Restart" : "Play"
+          );
+        } else {
+          playIcon.classList.add("hidden");
+          pauseIcon.classList.remove("hidden");
+          playPauseBtn.setAttribute("title", "Pause");
+        }
+      };
+      const updateProgressRing = (elapsedSeconds, totalSeconds) => {
+        const progress = totalSeconds > 0 ? elapsedSeconds / totalSeconds : 0;
+        const offset = circumference - Math.min(progress, 1) * circumference;
+        progressRingCircle.style.strokeDasharray = `${circumference} ${circumference}`;
+        progressRingCircle.style.strokeDashoffset = offset;
+      };
+
+      // Updated to draw start marker
+      const drawProgressMarkers = (timers, totalDuration) => {
+        progressRingMarkers.innerHTML = ""; // Clear existing markers
+        if (totalDuration <= 0) return;
+
+        // Add start/end marker at the top (0 degrees / -90 SVG rotation)
+        const startAngle = -90;
+        const startRadians = startAngle * (Math.PI / 180);
+        const sx1 = 50 + (radius - 8) * Math.cos(startRadians); // Slightly longer marker
+        const sy1 = 50 + (radius - 8) * Math.sin(startRadians);
+        const sx2 = 50 + (radius + 8) * Math.cos(startRadians);
+        const sy2 = 50 + (radius + 8) * Math.sin(startRadians);
+        const startLine = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "line"
+        );
+        startLine.setAttribute("x1", sx1);
+        startLine.setAttribute("y1", sy1);
+        startLine.setAttribute("x2", sx2);
+        startLine.setAttribute("y2", sy2);
+        startLine.classList.add("start-marker"); // Add class for specific styling
+        progressRingMarkers.appendChild(startLine);
+
+        let accumulatedDuration = 0;
+        timers.forEach((timer, index) => {
+          if (index < timers.length - 1) {
+            // Don't draw marker after the last timer
+            accumulatedDuration += timer.duration;
+            const angle = (accumulatedDuration / totalDuration) * 360 - 90; // -90 to align with SVG start
+            // Avoid drawing marker too close to the start/end marker
+            if (
+              Math.abs(angle - startAngle) > 1 &&
+              Math.abs(angle - (startAngle + 360)) > 1
+            ) {
+              const radians = angle * (Math.PI / 180);
+              const x1 = 50 + (radius - 6) * Math.cos(radians); // Inner point
+              const y1 = 50 + (radius - 6) * Math.sin(radians);
+              const x2 = 50 + (radius + 6) * Math.cos(radians); // Outer point (extend slightly beyond radius)
+              const y2 = 50 + (radius + 6) * Math.sin(radians);
+              const line = document.createElementNS(
+                "http://www.w3.org/2000/svg",
+                "line"
+              );
+              line.setAttribute("x1", x1);
+              line.setAttribute("y1", y1);
+              line.setAttribute("x2", x2);
+              line.setAttribute("y2", y2);
+              progressRingMarkers.appendChild(line);
+            }
+          }
+        });
+      };
+
+      // --- Search and Sort ---
+      const initializeFuse = () => {
+        const options = {
+          includeScore: true,
+          keys: ["name", "timers.title"],
+          threshold: 0.35,
+        };
+        fuseInstance = new Fuse(meditations, options);
+      };
+      const handleSearch = () => {
+        const query = searchInput.value.trim();
+        if (query === "") renderMeditationList(meditations);
+        else if (fuseInstance)
+          renderMeditationList(
+            fuseInstance.search(query).map((result) => result.item)
+          );
+      };
+
+      // --- Event Listeners ---
+      createMeditationBtn.addEventListener("click", () => editMeditation());
+      backToHomeBtn.addEventListener("click", () => {
+        if (hasUnsavedChanges) {
+          showConfirmation("Unsaved Changes", "Leave without saving?", () => {
+            stopPreviewSound(); // Stop preview sound if leaving
+            showScreen("home-screen");
+            currentEditMeditationId = null;
+            setUnsavedChanges(false);
+          });
+        } else {
+          stopPreviewSound(); // Stop preview sound if leaving
+          showScreen("home-screen");
+          currentEditMeditationId = null;
+        }
+      });
+      saveMeditationBtn.addEventListener("click", saveMeditation);
+      addTimerBtn.addEventListener("click", addTimer);
+      playPauseBtn.addEventListener("click", playPauseToggle);
+      exitPlaybackBtn.addEventListener("click", () => exitPlayback());
+      exitPlaybackLoadingBtn.addEventListener("click", () =>
+        exitPlayback(true)
+      );
+      searchInput.addEventListener("input", handleSearch);
+      sortSelect.addEventListener("change", () =>
+        renderMeditationList(meditations)
+      );
+
+      window.addEventListener("beforeunload", (event) => {
+        if (hasUnsavedChanges) {
+          event.preventDefault();
+          event.returnValue = "";
+          return "";
+        }
+      });
+
+      // --- Initialization ---
+      const initializeApp = () => {
+        loadMeditations();
+        loadHistory();
+        initializeFuse();
+        renderMeditationList();
+        showScreen("home-screen");
+        progressRingCircle.style.strokeDasharray = `${circumference} ${circumference}`;
+        progressRingCircle.style.strokeDashoffset = circumference;
+      };
+      document.addEventListener("DOMContentLoaded", initializeApp);
+    </script>
+  </body>
+</html>
